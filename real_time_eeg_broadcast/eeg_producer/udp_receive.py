@@ -6,6 +6,24 @@ import signal
 import struct
 import os
 import json
+import pyaudio
+import sounddevice as sd
+import numpy as np
+from datetime import datetime
+
+CHUNK = 1024
+FORMAT = pyaudio.paInt16
+CHANNELS = 1
+RATE = 1500
+
+p = pyaudio.PyAudio()
+
+stream = p.open(format=FORMAT,
+                channels=CHANNELS,
+                rate=RATE,
+                input=True,
+                frames_per_buffer=CHUNK,
+                output=True)
 
 # Print received message to console
 def print_message(*args):
@@ -45,6 +63,53 @@ def fetch_message(*args):
         print(e)
     return None
 
+def map_to_0_to_256_int(decoded_data):
+    #amplify = 0.1
+    arr_num = 0
+    channel_data = [0] * len(decoded_data[0])
+    for array in decoded_data:
+        arr_num += 1
+    for idx in range(len(array)):
+        channel_data[idx] += array[idx]
+
+    for idx in range(len(channel_data)):
+        channel_data[idx] = int(channel_data[idx] / arr_num)
+
+    _min = min(channel_data)
+    if _min < 0:
+        for idx in range(len(channel_data)):
+            channel_data[idx] -= _min
+
+    _min = min(channel_data)
+    _max = max(channel_data)
+    width  = (_max - _min)/255
+    for idx in range(len(channel_data)):
+        diff = channel_data[idx] - _min
+        channel_data[idx] = int(diff / width)
+    return channel_data
+
+def map_to_int(decoded_data):
+    #amplify = 0.1
+    arr_num = 0
+    channel_data = [0.0] * len(decoded_data[0])
+    for array in decoded_data:
+        arr_num += 1
+        for idx in range(len(array)):
+            channel_data[idx] += array[idx]
+
+    for idx in range(len(channel_data)):
+        channel_data[idx] = channel_data[idx] / arr_num
+
+    for idx in range(len(channel_data)):
+        channel_data[idx] = 10 * channel_data[idx]
+    '''
+    _min = min(channel_data)
+    if _min < 0:
+        for idx in range(len(channel_data)):
+            channel_data[idx] -= _min
+    '''
+    return channel_data
+
 if __name__ == "__main__":
   # Collect command line arguments
   parser = argparse.ArgumentParser()
@@ -53,7 +118,7 @@ if __name__ == "__main__":
   parser.add_argument("--port",
       type=int, default=12345, help="The port to listen on")
   parser.add_argument("--address",default="/openbci", help="address to listen to")
-  parser.add_argument("--option",default="print",help="Debugger option")
+  parser.add_argument("--option",default="record",help="Debugger option")
   parser.add_argument("--len",default=8,help="Debugger option")
   args = parser.parse_args()
 
@@ -94,14 +159,27 @@ if __name__ == "__main__":
   duration = 10
   #while time.time() <= start + duration:
   while True:
-    data, addr = sock.recvfrom(20000) # buffer size is 20000 bytes
+    data, addr = sock.recvfrom(32) # buffer size is 20000 bytes
     if args.option=="print":
       #print_message(data)
+
       decoded_data = fetch_message(data)
-      channels = [[]]
+
+      #channel_data = map_to_0_to_256_int(decoded_data)
+      channel_data = map_to_int(decoded_data)
+      print(datetime.now())
+
+      channel_data = np.repeat(channel_data, RATE/250)
+
+      sd.play(channel_data, RATE)  # 播放
+      time.sleep(len(channel_data)/RATE)
+
+      #stream.write(bytes(channel_data))
       numSamples += 1
     elif args.option=="record":
       record_to_file(data)
+      print(data)
+
 print( "Samples == {}".format(numSamples) )
 print( "Duration == {}".format(duration) )
 print( "Avg Sampling Rate == {}".format(numSamples / duration) )

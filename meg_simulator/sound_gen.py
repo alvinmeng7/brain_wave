@@ -87,18 +87,19 @@ def gen_multi_freq_wave():
 
 if __name__ == '__main__':
     raw = fetch_sample_data_from_mne()
-    max_time = 2000
+    max_time = 200
     picks = mne.pick_types(raw.info, meg=True, exclude='bads')
     t_idx = raw.time_as_index([0., max_time])
     data, times = raw[picks, t_idx[0]:t_idx[1]]
 
-    data = data * 1e11
+    #data = data * 1e11
 
     print("time length", len(times))
     #fs = 16000
     #eeg_array = raw
     sample_rate = 1200
     wave = np.repeat(data[0].T, 8)
+    print(wave)
     print("period time length:", len(wave)/sample_rate)
 
     #plt.plot(times, data[0].T)
